@@ -19,6 +19,16 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <shadow.h>
+#include <crypt.h>
+#include <pwd.h>
+
+char *full_encrypted_pass;
+char *salt;
+char *id;
+
+struct passwd *pw;
+struct spwd *sp;
 
 struct addrinfo min_info_strc; // addrinfo with minimum of information
 struct addrinfo *full_info_strc; // addrinfo which will be filled by getaddrinfo()
@@ -82,32 +92,16 @@ void e_listen(int socket_address, int count_of_connections)
   }
 }
 
-void authorisation()
+void sys_auth_user (const char *username, const char *password)
 {
-  char *send_msg_greet = "proftpd clone 0.1beta\n";
-  send(new_sck, send_msg_greet, strlen(send_msg_greet), 0);
 
-  char *send_msg_login_request = "Login: ";
-  send(new_sck, send_msg_login_request, strlen(send_msg_login_request), 0);
-
-  char recieve_login_buffer[20];
-  recv(new_sck, &recieve_login_buffer, sizeof recieve_login_buffer, 0);
-  printf("Login entered: %s\n", recieve_login_buffer);
-  memset(&recieve_login_buffer, 0, sizeof recieve_login_buffer);
-
-  char *send_msg_password_request = "Password: ";
-  send(new_sck, send_msg_password_request, strlen(send_msg_password_request), 0);
-
-  char recieve_password_buffer[20];
-  recv(new_sck, &recieve_password_buffer, sizeof recieve_password_buffer, 0);
-  printf("Password entered: %s\n", recieve_password_buffer);
-  memset(&recieve_password_buffer, 0, sizeof recieve_password_buffer);
 }
 
 // extended accept() with addr_size initialization (size of client's address), client socket's creation and error checking
 void e_accept(int socket_address)
 {
   // interaction with client is here
+
 
   while(1)
   {
@@ -121,13 +115,41 @@ void e_accept(int socket_address)
       exit(1);
     }
 
-    authorisation();
+    char *send_msg_greet = "proftpd clone 0.1beta\n";
+    send(new_sck, send_msg_greet, strlen(send_msg_greet), 0);
+
+    char *send_msg_login_request = "Login: ";
+    send(new_sck, send_msg_login_request, strlen(send_msg_login_request), 0);
+
+    char recieve_login_buffer[20];
+    recv(new_sck, &recieve_login_buffer, sizeof recieve_login_buffer, 0);
+    printf("Login entered: %s\n", recieve_login_buffer);
+    memset(&recieve_login_buffer, 0, sizeof recieve_login_buffer);
+
+    char *send_msg_password_request = "Password: ";
+    send(new_sck, send_msg_password_request, strlen(send_msg_password_request), 0);
+
+    char recieve_password_buffer[20];
+    recv(new_sck, &recieve_password_buffer, sizeof recieve_password_buffer, 0);
+    printf("Password entered: %s\n", recieve_password_buffer);
+    memset(&recieve_password_buffer, 0, sizeof recieve_password_buffer);
+
+    /* if (sys_auth_user(recieve_login_buffer, recieve_password_buffer) == 0)
+    {
+      char *granted_msg = "Password: ";
+      send(new_sck, granted_msg, strlen(granted_msg), 0);
+    }*/
+
+    sp = getspnam("root"); // это не переменная переполняется, это из получаемых значений надо удалить последний (нулевой) символ
+    full_encrypted_pass = sp->sp_pwdp;
+    // printf("%s\n", full_encrypted_pass);
   }
 }
 
 // entry point of programm
 int main(int argc, char *argv[])
 {
+  full_encrypted_pass = malloc(150);
   e_gai();
   e_socket(full_info_strc->ai_family, full_info_strc->ai_socktype, full_info_strc->ai_protocol);
   e_bind(sck, full_info_strc->ai_addr, full_info_strc->ai_addrlen);
