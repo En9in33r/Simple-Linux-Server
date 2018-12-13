@@ -40,7 +40,7 @@ struct sockaddr_storage their_addr; // info about incoming connection will go he
 socklen_t addr_size; // address size
 
 // extended getaddrinfo() with memset and error checking
-void e_gai()
+void e_gai(char port_number[5])
 {
   int status; // code which will be returned by getaddrinfo()
 
@@ -50,7 +50,7 @@ void e_gai()
   min_info_strc.ai_socktype = SOCK_STREAM; // tcp
   min_info_strc.ai_flags = AI_PASSIVE; // localhost
 
-  status = getaddrinfo(NULL, "9999", &min_info_strc, &full_info_strc);
+  status = getaddrinfo(NULL, port_number, &min_info_strc, &full_info_strc);
   if (status != 0) // 0 is correct
   {
     fprintf(stderr, "e_gai() error: %s\n", gai_strerror(status)); // print error in console
@@ -92,8 +92,13 @@ void e_listen(int socket_address, int count_of_connections)
   }
 }
 
-void sys_auth_user (const char *username, const char *password)
+void sys_auth_user (char *username, char *password)
 {
+  // на вход подается логин, по нему находится пароль через shadow file, пароль разрезается на id, salt и hash, после чего по соли шифруется полученный от клиента
+  // пароль; эти значения затем сравниваются
+  // strcat(*recieve_login_buffer, "\0");
+  //
+
 
 }
 
@@ -101,7 +106,6 @@ void sys_auth_user (const char *username, const char *password)
 void e_accept(int socket_address)
 {
   // interaction with client is here
-
 
   while(1)
   {
@@ -115,34 +119,40 @@ void e_accept(int socket_address)
       exit(1);
     }
 
+    char recieve_login_buffer[20];
+    char recieve_password_buffer[20];
+
+    memset(&recieve_login_buffer, 0, sizeof recieve_login_buffer);
+    memset(&recieve_password_buffer, 0, sizeof recieve_password_buffer);
+
+    freeaddrinfo(full_info_strc);
+
+    int login_bytes_recieved, password_bytes_recieved;
+
     char *send_msg_greet = "proftpd clone 0.1beta\n";
     send(new_sck, send_msg_greet, strlen(send_msg_greet), 0);
 
     char *send_msg_login_request = "Login: ";
     send(new_sck, send_msg_login_request, strlen(send_msg_login_request), 0);
 
-    char recieve_login_buffer[20];
-    recv(new_sck, &recieve_login_buffer, sizeof recieve_login_buffer, 0);
+    login_bytes_recieved = recv(new_sck, &recieve_login_buffer, sizeof recieve_login_buffer, 0);
+    recieve_login_buffer[login_bytes_recieved - 2] = '\0';
     printf("Login entered: %s\n", recieve_login_buffer);
-    memset(&recieve_login_buffer, 0, sizeof recieve_login_buffer);
+    printf("recieved %d bytes\n", login_bytes_recieved);
 
     char *send_msg_password_request = "Password: ";
     send(new_sck, send_msg_password_request, strlen(send_msg_password_request), 0);
 
-    char recieve_password_buffer[20];
-    recv(new_sck, &recieve_password_buffer, sizeof recieve_password_buffer, 0);
+    password_bytes_recieved = recv(new_sck, &recieve_password_buffer, sizeof recieve_password_buffer, 0);
+    recieve_password_buffer[password_bytes_recieved - 2] = '\0';
     printf("Password entered: %s\n", recieve_password_buffer);
-    memset(&recieve_password_buffer, 0, sizeof recieve_password_buffer);
+    printf("recieved %d bytes\n", password_bytes_recieved);
 
-    /* if (sys_auth_user(recieve_login_buffer, recieve_password_buffer) == 0)
-    {
-      char *granted_msg = "Password: ";
-      send(new_sck, granted_msg, strlen(granted_msg), 0);
-    }*/
+    //printf("Login now: %s check", recieve_login_buffer);
 
-    sp = getspnam("root"); // это не переменная переполняется, это из получаемых значений надо удалить последний (нулевой) символ
+    sp = getspnam(recieve_login_buffer);
     full_encrypted_pass = sp->sp_pwdp;
-    // printf("%s\n", full_encrypted_pass);
+    printf("%s\n", full_encrypted_pass);
   }
 }
 
@@ -150,7 +160,7 @@ void e_accept(int socket_address)
 int main(int argc, char *argv[])
 {
   full_encrypted_pass = malloc(150);
-  e_gai();
+  e_gai(argv[1]);
   e_socket(full_info_strc->ai_family, full_info_strc->ai_socktype, full_info_strc->ai_protocol);
   e_bind(sck, full_info_strc->ai_addr, full_info_strc->ai_addrlen);
   e_listen(sck, 20);
