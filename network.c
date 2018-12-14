@@ -92,16 +92,6 @@ void e_listen(int socket_address, int count_of_connections)
   }
 }
 
-void sys_auth_user (char *username, char *password)
-{
-  // на вход подается логин, по нему находится пароль через shadow file, пароль разрезается на id, salt и hash, после чего по соли шифруется полученный от клиента
-  // пароль; эти значения затем сравниваются
-  // strcat(*recieve_login_buffer, "\0");
-  //
-
-
-}
-
 // extended accept() with addr_size initialization (size of client's address), client socket's creation and error checking
 void e_accept(int socket_address)
 {
@@ -119,40 +109,70 @@ void e_accept(int socket_address)
       exit(1);
     }
 
-    char recieve_login_buffer[20];
-    char recieve_password_buffer[20];
+    char recieve_login_buffer[20]; // buffer for recieved login
+    char recieve_password_buffer[20]; // buffer for recieved password
 
-    memset(&recieve_login_buffer, 0, sizeof recieve_login_buffer);
-    memset(&recieve_password_buffer, 0, sizeof recieve_password_buffer);
+    char *sending_msg = malloc(100);
 
-    freeaddrinfo(full_info_strc);
+    freeaddrinfo(full_info_strc); // clear the structure
 
-    int login_bytes_recieved, password_bytes_recieved;
+    int password_and_login_are_correct = 0;
+    while (password_and_login_are_correct == 0)
+    {
+      int login_bytes_recieved, password_bytes_recieved; // variables for counts of recieved bytes
 
-    char *send_msg_greet = "proftpd clone 0.1beta\n";
-    send(new_sck, send_msg_greet, strlen(send_msg_greet), 0);
+      sending_msg = "proftpd clone 0.1beta\n";
+      send(new_sck, sending_msg, strlen(sending_msg), 0);
+      memset(&sending_msg, 0, sizeof sending_msg);
 
-    char *send_msg_login_request = "Login: ";
-    send(new_sck, send_msg_login_request, strlen(send_msg_login_request), 0);
+      sending_msg = "Login: \n";
+      send(new_sck, sending_msg, strlen(sending_msg), 0);
+      memset(&sending_msg, 0, sizeof sending_msg);
 
-    login_bytes_recieved = recv(new_sck, &recieve_login_buffer, sizeof recieve_login_buffer, 0);
-    recieve_login_buffer[login_bytes_recieved - 2] = '\0';
-    printf("Login entered: %s\n", recieve_login_buffer);
-    printf("recieved %d bytes\n", login_bytes_recieved);
+      login_bytes_recieved = recv(new_sck, &recieve_login_buffer, sizeof recieve_login_buffer, 0);
+      if (login_bytes_recieved > 2)
+      {
+        recieve_login_buffer[login_bytes_recieved - 2] = '\0';
+        printf("Login entered: %s\n", recieve_login_buffer);
+        printf("recieved %d bytes\n", login_bytes_recieved);
+      }
+      else
+      {
+        fprintf(stderr, "recv() error: %s\n", gai_strerror(-1));
+        exit(1);
+      }
 
-    char *send_msg_password_request = "Password: ";
-    send(new_sck, send_msg_password_request, strlen(send_msg_password_request), 0);
+      sending_msg = "Password: \n";
+      send(new_sck, sending_msg, strlen(sending_msg), 0);
+      memset(&sending_msg, 0, sizeof sending_msg);
 
-    password_bytes_recieved = recv(new_sck, &recieve_password_buffer, sizeof recieve_password_buffer, 0);
-    recieve_password_buffer[password_bytes_recieved - 2] = '\0';
-    printf("Password entered: %s\n", recieve_password_buffer);
-    printf("recieved %d bytes\n", password_bytes_recieved);
+      password_bytes_recieved = recv(new_sck, &recieve_password_buffer, sizeof recieve_password_buffer, 0);
+      if (password_bytes_recieved > 2)
+      {
+        recieve_password_buffer[password_bytes_recieved - 2] = '\0';
+        printf("Password entered: %s\n", recieve_password_buffer);
+        printf("recieved %d bytes\n", password_bytes_recieved);
+      }
+      else
+      {
+        fprintf(stderr, "recv() error: %s\n", gai_strerror(-1));
+        exit(1);
+      }
 
-    //printf("Login now: %s check", recieve_login_buffer);
+      sp = getspnam(recieve_login_buffer);
+      full_encrypted_pass = sp->sp_pwdp;
+      printf("%s\n", full_encrypted_pass);
 
-    sp = getspnam(recieve_login_buffer);
-    full_encrypted_pass = sp->sp_pwdp;
-    printf("%s\n", full_encrypted_pass);
+      // осталось извлечь соль, хэш и id, зашифровать присланный пароль с использованием соли, сравнить полученное значение с хэшем
+
+      if (strcmp(crypt(recieve_password_buffer, full_encrypted_pass), full_encrypted_pass) == 0)
+      {
+        password_and_login_are_correct = 1;
+      }
+
+      memset(&recieve_login_buffer, 0, sizeof recieve_login_buffer); // check if these buffers are empty
+      memset(&recieve_password_buffer, 0, sizeof recieve_password_buffer);
+    }
   }
 }
 
