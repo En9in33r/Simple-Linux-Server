@@ -173,6 +173,8 @@ void e_accept(int socket_address)
 
       memset(&full_encrypted_pass, 0, sizeof full_encrypted_pass); // ...and also for encrypted password
     }
+
+    // After the successful authorisation we are leaving the cycle. This journey is going to be perfect.
   }
 }
 
