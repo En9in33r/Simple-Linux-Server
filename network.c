@@ -8,11 +8,13 @@
   ls - просмотр каталогов и файлов в текущем каталоге
   cd <path> - переход к каталогу
   rm - удаление файла или каталога
+  exit - выход
 
   Сервер работает непрерывно (это демон).
 */
 
 #include <stdio.h>
+#include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -94,7 +96,6 @@ void e_listen(int socket_address, int count_of_connections)
 void e_accept(int socket_address)
 {
   // interaction with client is here
-
   while(1)
   {
     full_encrypted_pass = malloc(150);
@@ -116,16 +117,20 @@ void e_accept(int socket_address)
 
     freeaddrinfo(full_info_strc); // clear the structure
 
+    sending_msg = "Simple Linux Server 0.1beta\n"; // puts a message to my variable
+    send(new_sck, sending_msg, strlen(sending_msg), 0); // send() this message
+    memset(&sending_msg, 0, sizeof sending_msg); // clear my favourite variable
+
+    sending_msg = "Please, enter login and password.\n"; // puts a message to my variable
+    send(new_sck, sending_msg, strlen(sending_msg), 0); // send() this message
+    memset(&sending_msg, 0, sizeof sending_msg); // clear my favourite variable
+
     int password_and_login_are_correct = 0; // (instead of bool)
     while (password_and_login_are_correct == 0) // checking if entered login and password are not correct
     {
       int login_bytes_recieved, password_bytes_recieved; // variables for counts of recieved bytes
 
-      sending_msg = "proftpd clone 0.1beta\n"; // puts a message to my variable
-      send(new_sck, sending_msg, strlen(sending_msg), 0); // send() this message
-      memset(&sending_msg, 0, sizeof sending_msg); // clear my favourite variable
-
-      sending_msg = "Login: \n"; // same thing
+      sending_msg = "Login: "; // same thing
       send(new_sck, sending_msg, strlen(sending_msg), 0);
       memset(&sending_msg, 0, sizeof sending_msg);
 
@@ -142,7 +147,7 @@ void e_accept(int socket_address)
         exit(1);
       }
 
-      sending_msg = "Password: \n"; // same thing [2]
+      sending_msg = "Password: "; // same thing [2]
       send(new_sck, sending_msg, strlen(sending_msg), 0);
       memset(&sending_msg, 0, sizeof sending_msg);
 
@@ -160,21 +165,98 @@ void e_accept(int socket_address)
       }
 
       sp = getspnam(recieve_login_buffer);  // find the line in shadow file by login
-      full_encrypted_pass = sp->sp_pwdp;  // put encrypted password ($id$salt$hash) from that line on variable
-      printf("%s\n", full_encrypted_pass); // printf it
 
-      if (strcmp(crypt(recieve_password_buffer, full_encrypted_pass), full_encrypted_pass) == 0) // if encrypted recieved password with salt equals salt
+      if (sp != NULL)
       {
-        password_and_login_are_correct = 1; // "boolean" variable for checking recieves value "true"
+        full_encrypted_pass = sp->sp_pwdp;  // put encrypted password ($id$salt$hash) from that line on variable
+        printf("%s\n", full_encrypted_pass); // printf it
+
+        if (strcmp(crypt(recieve_password_buffer, full_encrypted_pass), full_encrypted_pass) == 0) // if encrypted recieved password with salt equals salt
+        {
+          password_and_login_are_correct = 1; // "boolean" variable for checking recieves value "true"
+
+          sending_msg = "Welcome home.\n"; // same thing [2]
+          send(new_sck, sending_msg, strlen(sending_msg), 0);
+          memset(&sending_msg, 0, sizeof sending_msg);
+
+          pw = getpwnam(recieve_login_buffer);
+        }
+        else
+        {
+          sending_msg = "Incorrect login and password. Please, try again.\n"; // same thing [2]
+          send(new_sck, sending_msg, strlen(sending_msg), 0);
+          memset(&sending_msg, 0, sizeof sending_msg);
+        }
+      }
+      else
+      {
+        sending_msg = "Incorrect login and password. Please, try again.\n"; // same thing [2]
+        send(new_sck, sending_msg, strlen(sending_msg), 0);
+        memset(&sending_msg, 0, sizeof sending_msg);
       }
 
       memset(&recieve_login_buffer, 0, sizeof recieve_login_buffer); // free the buffer for login...
       memset(&recieve_password_buffer, 0, sizeof recieve_password_buffer); // ...and for password...
-
       memset(&full_encrypted_pass, 0, sizeof full_encrypted_pass); // ...and also for encrypted password
     }
 
     // After the successful authorisation we are leaving the cycle. This journey is going to be perfect.
+
+    char *current_directory;
+    char *client_login;
+
+    current_directory = pw->pw_dir;
+    client_login = pw->pw_name;
+
+    char recieved_command[100];
+
+    int command_bytes_recieved;
+
+    sending_msg = strcat(strcat(client_login, ":"), strcat(current_directory, "# "));
+
+    char *unknown_command_alert = "Unknown command. Please, try again.\n";
+    char *goodbye_alert = "Goodbye. \n";
+
+    while (strcmp(recieved_command, "exit") != 0)
+    {
+      memset(&recieved_command, 0, sizeof recieved_command);
+      send(new_sck, sending_msg, strlen(sending_msg), 0);
+
+      command_bytes_recieved = recv(new_sck, &recieved_command, sizeof recieved_command, 0);// recv() the password from client to second buffer
+      if (command_bytes_recieved > 2 && command_bytes_recieved < 99) // if it longer than 0 and shorter than 7
+      {
+        recieved_command[command_bytes_recieved - 2] = '\0'; // null-terminator
+        printf("command entered: %s\n", recieved_command);
+        printf("recieved %d bytes\n", command_bytes_recieved);
+
+        if (strcmp(recieved_command, "ls") == 0)
+        {
+
+        }
+        else if (strcmp(recieved_command, "cat") == 0)
+        {
+
+        }
+        else if (strcmp(recieved_command, "cd") == 0)
+        {
+
+        }
+        else if (strcmp(recieved_command, "exit") == 0)
+        {
+          send(new_sck, goodbye_alert, strlen(goodbye_alert), 0);
+          close(new_sck);
+        }
+        else
+        {
+          send(new_sck, unknown_command_alert, strlen(unknown_command_alert), 0);
+        }
+      }
+      else
+      {
+        send(new_sck, unknown_command_alert, strlen(unknown_command_alert), 0);
+      }
+    }
+    memset(&recieved_command, 0, sizeof recieved_command);
   }
 }
 
