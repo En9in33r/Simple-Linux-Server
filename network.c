@@ -24,6 +24,8 @@
 #include <shadow.h>
 #include <crypt.h>
 #include <pwd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 struct passwd *pw; // struct for password file
 struct spwd *sp;  // struct for shadow password file
@@ -212,17 +214,36 @@ void e_accept(int socket_address)
 
     int command_bytes_recieved;
 
-    sending_msg = strcat(strcat(client_login, ":"), strcat(current_directory, "# "));
+    // sending_msg = strcat(strcat(client_login, ":"), strcat(current_directory, "# "));
+    sending_msg = malloc(200);
+    strcat(sending_msg, client_login);
+    strcat(sending_msg, ":");
+    strcat(sending_msg, current_directory);
+    strcat(sending_msg, "# ");
+
+    printf ("client_login: %s\n", client_login);
+    printf ("current_directory: %s\n", current_directory);
 
     char *unknown_command_alert = "Unknown command. Please, try again.\n";
     char *goodbye_alert = "Goodbye. \n";
 
+    char *cat_no_args_error = "No args entered in cat command.\n";
+    char *cat_no_such_file = "No such file. \n";
+    char *cat_catalog = "Can't open: it's a catalog. \n";
+    char *cat_not_a_file = "Can't open: it's not a usual file. \n";
+
+    char *cd_no_args_error = "No args entered in cd command.\n";
+
+    struct stat file_info;
+    memset(&file_info, 0, sizeof file_info);
+
     while (strcmp(recieved_command, "exit") != 0)
     {
       memset(&recieved_command, 0, sizeof recieved_command);
+
       send(new_sck, sending_msg, strlen(sending_msg), 0);
 
-      command_bytes_recieved = recv(new_sck, &recieved_command, sizeof recieved_command, 0);// recv() the password from client to second buffer
+      command_bytes_recieved = recv(new_sck, &recieved_command, sizeof recieved_command, 0);  // recv() the password from client to second buffer
       if (command_bytes_recieved > 2 && command_bytes_recieved < 99) // if it longer than 0 and shorter than 7
       {
         recieved_command[command_bytes_recieved - 2] = '\0'; // null-terminator
@@ -233,13 +254,147 @@ void e_accept(int socket_address)
         {
 
         }
-        else if (strcmp(recieved_command, "cat") == 0)
+        else if (recieved_command[0] == 'c' && recieved_command[1] == 'a' && recieved_command[2] == 't') // if client sends "cat"
         {
+            if (recieved_command[3] == ' ') // if third symbol is ' '
+            {
+              char temp_dir[command_bytes_recieved]; // make temporary variable for recieved directory
+              memset(temp_dir, 0, strlen(temp_dir)); // check if it isn't null
 
+              int i = 4;
+              while (recieved_command[i] != '\0') // fill temporary variable
+              {
+                temp_dir[i - 4] = recieved_command[i];
+                i++;
+              }
+              temp_dir[i - 4] = '\0';
+
+              printf("%s\n", temp_dir);
+
+              if (temp_dir[0] == '/') // if zero symbol is /
+              {
+                // if fourth element of recieved_command equals /
+                  // check if it's a common file
+                  // then open() file by full path
+
+                  if (stat(temp_dir, &file_info) >= 0) // get the stat structure (info about the file)
+                  {
+                    if (S_ISDIR(file_info.st_mode)) // if it is a catalog
+                    {
+                      send(new_sck, cat_catalog, strlen(cat_catalog), 0);
+                    }
+                    else if (S_ISREG(file_info.st_mode)) // if it's a usual file
+                    {
+                      // create a file descriptor, open file and send content to client
+                      char *read_file_buffer = malloc(200);
+
+                      int temp_fd = open(temp_dir, O_RDONLY);
+                      if (temp_fd != -1)
+                      {
+                        if (read(temp_fd, read_file_buffer, 200) != -1)
+                        {
+                          send(new_sck, read_file_buffer, strlen(read_file_buffer), 0);
+                        }
+
+                        close(temp_fd);
+                      }
+                      else
+                      {
+                        send(new_sck, cat_no_such_file, strlen(cat_no_such_file), 0);
+                      }
+                    }
+                    else
+                    {
+                      send(new_sck, cat_not_a_file, strlen(cat_not_a_file), 0);
+                    }
+                  }
+                  else // if stat() returned a value below 0 (failed)
+                  {
+                    send(new_sck, cat_no_such_file, strlen(cat_no_such_file), 0);
+                  }
+              }
+              else if (temp_dir[0] == '\0') // if temp_dir is empty
+              {
+                send(new_sck, cat_no_args_error, strlen(cat_no_args_error), 0);
+              }
+              else // if temp_dir isn't starts from /
+              {
+                // else
+                  // check if it's a common file
+                  // then open() file by current_directory + entered data after "cat "
+
+                  char *temp_dir_full = malloc(200);
+
+                  // temp_dir_full = strcat(current_directory, temp_dir);
+                  strcat(temp_dir_full, current_directory);
+                  strcat(temp_dir_full, "/");
+                  strcat(temp_dir_full, temp_dir);
+
+                  printf("%s\n", temp_dir_full);
+
+                  if (stat(temp_dir_full, &file_info) >= 0) // get the stat structure (info about the file)
+                  {
+                    if (S_ISDIR(file_info.st_mode)) // if it is a catalog
+                    {
+                      send(new_sck, cat_catalog, strlen(cat_catalog), 0);
+                    }
+                    else if (S_ISREG(file_info.st_mode)) // if it's a usual file
+                    {
+                      // create a file descriptor, open file and send content to client
+                      char *read_file_buffer = malloc(200);
+
+                      int temp_fd = open(temp_dir_full, O_RDONLY);
+                      if (temp_fd != -1)
+                      {
+                        if (read(temp_fd, read_file_buffer, 200) != -1)
+                        {
+                          send(new_sck, read_file_buffer, strlen(read_file_buffer), 0);
+                        }
+
+                        close(temp_fd);
+                      }
+                      else
+                      {
+                        send(new_sck, cat_no_such_file, strlen(cat_no_such_file), 0);
+                      }
+                    }
+                    else
+                    {
+                      send(new_sck, cat_not_a_file, strlen(cat_not_a_file), 0);
+                    }
+                  }
+                  else // if stat() returned a value below 0 (failed)
+                  {
+                    send(new_sck, cat_no_such_file, strlen(cat_no_such_file), 0);
+                  }
+              }
+            }
+            else if (recieved_command[3] == '\0') // if recieved_command equals "cat" without args
+            {
+              send(new_sck, cat_no_args_error, strlen(cat_no_args_error), 0);
+            }
         }
-        else if (strcmp(recieved_command, "cd") == 0)
+        else if (recieved_command[0] == 'c' && recieved_command[1] == 'd') // if client sends "cd"
         {
-
+            if (recieved_command[2] == ' ')
+            {
+              if (recieved_command[3] == '/')
+              {
+                // if third element of recieved_command equals /
+                  // check if it's a catalog
+                  // then current_directory will be equal full path entered
+              }
+              else
+              {
+                // else
+                  // check if it's a catalog
+                  // then current_directory will be equal current_directory + data entered after "cd "
+              }
+            }
+            else if (recieved_command[2] == '\0')
+            {
+              send(new_sck, cd_no_args_error, strlen(cd_no_args_error), 0);
+            }
         }
         else if (strcmp(recieved_command, "exit") == 0)
         {
