@@ -233,6 +233,8 @@ void e_accept(int socket_address)
     char *cat_not_a_file = "Can't open: it's not a usual file. \n";
 
     char *cd_no_args_error = "No args entered in cd command.\n";
+    char *cd_not_a_catalog = "Can't move: it's not a catalog. \n";
+    char *cd_no_such_catalog = "Can't move: no such catalog. \n";
 
     struct stat file_info;
     memset(&file_info, 0, sizeof file_info);
@@ -376,19 +378,96 @@ void e_accept(int socket_address)
         }
         else if (recieved_command[0] == 'c' && recieved_command[1] == 'd') // if client sends "cd"
         {
-            if (recieved_command[2] == ' ')
+            if (recieved_command[2] == ' ') // if second symbol is ' '
             {
-              if (recieved_command[3] == '/')
+              char temp_dir[command_bytes_recieved]; // make temporary variable for recieved directory
+              memset(temp_dir, 0, strlen(temp_dir)); // check if it isn't null
+
+              int i = 3;
+              while (recieved_command[i] != '\0') // fill temporary variable
+              {
+                temp_dir[i - 3] = recieved_command[i];
+                i++;
+              }
+              temp_dir[i - 3] = '\0';
+
+              printf("%s\n", temp_dir);
+
+              if (temp_dir[0] == '/') // if zero symbol is /
               {
                 // if third element of recieved_command equals /
                   // check if it's a catalog
-                  // then current_directory will be equal full path entered
+                  // then change current_directory to that path
+
+                  if (stat(temp_dir, &file_info) >= 0) // get the stat structure (info about the file)
+                  {
+                    if (S_ISDIR(file_info.st_mode)) // if it is a catalog
+                    {
+                      // change current_directory to temp_dir
+                      memset(current_directory, 0, sizeof current_directory);
+                      strcat(current_directory, temp_dir);
+
+                      memset(sending_msg, 0, sizeof sending_msg);
+                      strcat(sending_msg, client_login);
+                      strcat(sending_msg, ":");
+                      strcat(sending_msg, current_directory);
+                      strcat(sending_msg, "# ");
+
+                    }
+                    else // if it isn't a catalog
+                    {
+                      send(new_sck, cd_not_a_catalog, strlen(cd_not_a_catalog), 0);
+                    }
+                  }
+                  else // if stat() returned a value below 0 (failed)
+                  {
+                    send(new_sck, cd_no_such_catalog, strlen(cd_no_such_catalog), 0);
+                  }
               }
-              else
+              else if (temp_dir[0] == '\0') // if temp_dir is empty
+              {
+                send(new_sck, cd_no_args_error, strlen(cd_no_args_error), 0);
+              }
+              else // if temp_dir isn't starts from /
               {
                 // else
                   // check if it's a catalog
-                  // then current_directory will be equal current_directory + data entered after "cd "
+                  // then change the current_directory to temp_dir_full
+
+                  char *temp_dir_full = malloc(200);
+
+                  // temp_dir_full = strcat(current_directory, temp_dir);
+                  strcat(temp_dir_full, current_directory);
+                  if (strcmp(current_directory, "/") != 0)
+                  {
+                    strcat(temp_dir_full, "/");
+                  }
+                  strcat(temp_dir_full, temp_dir);
+
+                  printf("%s\n", temp_dir_full);
+
+                  if (stat(temp_dir_full, &file_info) >= 0) // get the stat structure (info about the file)
+                  {
+                    if (S_ISDIR(file_info.st_mode)) // if it is a catalog
+                    {
+                      memset(current_directory, 0, sizeof current_directory);
+                      strcat(current_directory, temp_dir_full);
+
+                      memset(sending_msg, 0, sizeof sending_msg);
+                      strcat(sending_msg, client_login);
+                      strcat(sending_msg, ":");
+                      strcat(sending_msg, current_directory);
+                      strcat(sending_msg, "# ");
+                    }
+                    else
+                    {
+                      send(new_sck, cd_not_a_catalog, strlen(cd_not_a_catalog), 0);
+                    }
+                  }
+                  else // if stat() returned a value below 0 (failed)
+                  {
+                    send(new_sck, cd_no_such_catalog, strlen(cd_no_such_catalog), 0);
+                  }
               }
             }
             else if (recieved_command[2] == '\0')
