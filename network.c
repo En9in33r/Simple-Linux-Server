@@ -26,6 +26,7 @@
 #include <pwd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <dirent.h>
 
 struct passwd *pw; // struct for password file
 struct spwd *sp;  // struct for shadow password file
@@ -40,6 +41,9 @@ int sck, new_sck; // my and client socket's address
 struct sockaddr_storage their_addr; // info about incoming connection will go here
 
 socklen_t addr_size; // address size
+
+DIR *dir; // working with catalogs
+struct dirent *ent;
 
 // extended getaddrinfo() with memset and error checking
 void e_gai(char port_number[5])
@@ -224,6 +228,8 @@ void e_accept(int socket_address)
     printf ("client_login: %s\n", client_login);
     printf ("current_directory: %s\n", current_directory);
 
+    char *ls_output;
+
     char *unknown_command_alert = "Unknown command. Please, try again.\n";
     char *goodbye_alert = "Goodbye. \n";
 
@@ -235,6 +241,8 @@ void e_accept(int socket_address)
     char *cd_no_args_error = "No args entered in cd command.\n";
     char *cd_not_a_catalog = "Can't move: it's not a catalog. \n";
     char *cd_no_such_catalog = "Can't move: no such catalog. \n";
+
+    // memset(&ls_output, 0, sizeof ls_output);
 
     struct stat file_info;
     memset(&file_info, 0, sizeof file_info);
@@ -254,7 +262,21 @@ void e_accept(int socket_address)
 
         if (strcmp(recieved_command, "ls") == 0)
         {
+          if ((dir = opendir (current_directory)) != NULL)
+          {
+              /* print all the files and directories within directory */
+            while ((ent = readdir (dir)) != NULL)
+            {
+              // strcat(ls_output, ent->d_name);
+              // strcat(ls_output, "\n");
+              send(new_sck, ent->d_name, strlen(ent->d_name), 0);
+              // memset(ls_output, 0, sizeof ls_output);
+            }
 
+            printf("%s\n", current_directory);
+
+            closedir (dir);
+          }
         }
         else if (recieved_command[0] == 'c' && recieved_command[1] == 'a' && recieved_command[2] == 't') // if client sends "cat"
         {
