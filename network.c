@@ -27,6 +27,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <syslog.h>
+#include <sys/resource.h>
+#include <signal.h>
 
 struct passwd *pw; // struct for password file
 struct spwd *sp;  // struct for shadow password file
@@ -519,6 +522,46 @@ void e_accept(int socket_address)
 // entry point of programm
 int main(int argc, char *argv[])
 {
+  int i, fd0, fd1, fd2;
+  pid_t pid;
+  struct rlimit rl;
+  struct sigaction sa;
+
+  umask(0);
+
+  if (getrlimit(RLIMIT_NOFILE, &rl) < 0) { }
+    //err_quit("%s: can't get max descriptor number");
+
+  if ((pid = fork()) < 0) { }
+  else if (pid != 0)
+    exit(0);
+  setsid();
+
+  sa.sa_handler = SIG_IGN;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  if (sigaction(SIGHUP, &sa, NULL) < 0) { }
+  if ((pid = fork()) < 0) { }
+  else if (pid != 0)
+    exit(0);
+
+  if (chdir("/") < 0) { }
+  if (rl.rlim_max == RLIM_INFINITY)
+    rl.rlim_max = 1024;
+  for (i = 0; i < rl.rlim_max; i++)
+    close(i);
+
+  fd0 = open("/dev/null", O_RDWR);
+  fd1 = dup(0);
+  fd2 = dup(0);
+
+/*
+  openlog(cmd, LOG_CONS, LOG_DAEMON);
+  if (fd0 != 0 || fd1 != 1 || fd2 != 2)
+  {
+    exit(1);
+  }
+*/
   e_gai(argv[1]);
   e_socket(full_info_strc->ai_family, full_info_strc->ai_socktype, full_info_strc->ai_protocol);
   e_bind(sck, full_info_strc->ai_addr, full_info_strc->ai_addrlen);
